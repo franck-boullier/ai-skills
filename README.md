@@ -23,7 +23,7 @@ This repository is a collection of skills that I have created for my own use.
 
 ## How To Contribute
 
-If you have a skill that you would like to contribute, please feel free to submit a pull request.
+If you have a skill that you would like to contribute, please feel free to submit a pull request. Check out the [Contributing Guide](./CONTRIBUTING.md) for more information.
 
 ## License
 
