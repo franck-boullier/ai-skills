@@ -4,14 +4,4 @@ More Details about what skills are and how to use them.
 
 - [What are skills?](./skills-overview.md)
 
-## Cursor
-
-- [How to add a skill to Cursor](./cursor/add-a-skill-to-cursor.md).
-
-## Claude (Claude Code, Claude Co-work)
-
-- [How to add a skill to Claude](./claude/add-a-skill-to-claude.md).
-
-## Google Antigravity
-
-- [How to add a skill to Google Antigravity](./google-antigravity/add-a-skill-to-google-antigravity.md).
+Skills I have creeated there and the related documents in this repository are an example of how to implement the [COOL (COntext and Output Libraries) Framework](https://www.linkedin.com/pulse/introducing-context-outputs-library-cool-framework-ai-franck-boullier-9jb9e) that I described back in June 2024.
