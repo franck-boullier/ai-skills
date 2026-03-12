@@ -4,7 +4,9 @@
 
 The skills I have created for my own use, organized by category.
 
-- [Coding skills](./code/): Skills related to coding.
+- [Coding skills](./coding-skills/): Skills related to coding.
+- [Generic skills](./generic-skills/): Skills that can be used in a variety of contexts.
+- [Job-search-related-skills](./job-search-skills/): Skills related to job search and tasks related to job searches.
 
 ## Other Sources Of Skills
 
