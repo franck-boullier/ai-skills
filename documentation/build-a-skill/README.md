@@ -22,7 +22,7 @@ DRAFT
 
 Prefer a tool that lives on your machine and that can read and write files on your machine. This will make the process easier and faster.
 
-### CLaude Cowork
+### Claude Cowork
 
 <include pros and cons>
 <explain that the `.skill` format is actually a `.zip` file>
