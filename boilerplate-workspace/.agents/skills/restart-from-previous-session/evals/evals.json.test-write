@@ -1,0 +1,6 @@
+{
+  "skill_name": "restart-from-previous-session",
+  "schema_version": 1,
+  "notes": "Eight test cases covering both invocation paths, the four lifecycle outcomes, and two end-to-end chain scenarios where session-start and session-end fire inside one continuous agent. Each case is a realistic user prompt. Expected outputs describe the deliverables the agent should produce; assertions are programmatically checkable predicates over those deliverables. Test cases assume the agent has access to the skill at draft-skill/SKILL.md and can read/write inside a sandboxed workspace mirroring memories/restart-guides/.",
+  "evals": []
+}

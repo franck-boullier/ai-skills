@@ -1,0 +1,86 @@
+{
+  "skill_name": "save-agent-memories",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "We just decided to switch our primary database from PostgreSQL to Supabase because of its built-in row-level security and real-time subscriptions — it fits our multi-tenant SaaS model much better. Firebase and PlanetScale were considered but didn't make the cut. Please save this decision.",
+      "expected_output": "A well-structured decision file created at memory/decisions/<slug>/README.md with MAGI-compatible YAML frontmatter (doc-id, title, description, category: decision, created, last-updated, tags), a body covering the decision statement, reasoning, alternatives considered (Firebase, PlanetScale), trade-offs, and affected areas. MEMORY.md updated with a pointer under Recent Decisions. Confirmation message to the user.",
+      "files": [
+        "tests/memories-scb-api-head/MEMORY.md",
+        "tests/memories-scb-api-head/decisions/README.md"
+      ],
+      "expectations": [
+        "A decision file is created at a path under memory/decisions/ with a README.md as the entry point",
+        "The decision file includes MAGI-compatible YAML frontmatter with fields: doc-id, title, description, category set to 'decision', created, last-updated, and tags",
+        "The decision file body includes all four required sections: the decision itself, reasoning for choosing Supabase, alternatives considered (naming both Firebase and PlanetScale), and trade-offs",
+        "MEMORY.md is updated to include a new pointer to the decision under a Recent Decisions section",
+        "The agent confirms to the user what was saved and where, in a clear summary message"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I've noticed you keep formatting your summaries as prose paragraphs but I actually prefer bullet points — clear, short, scannable. Please remember this preference for all future responses.",
+      "expected_output": "A preference file created at memory/preferences/<slug>.md with MAGI-compatible YAML frontmatter. Body clearly states the preference (bullet points over prose), the context (all response summaries), and the date it was stated. MEMORY.md updated with a one-line preference entry under User Preferences. Confirmation to user.",
+      "files": [
+        "tests/memories-scb-api-head/MEMORY.md",
+        "tests/memories-scb-api-head/preferences/README.md"
+      ],
+      "expectations": [
+        "A preference file is created at a path under memory/preferences/ with a .md extension",
+        "The preference file includes MAGI-compatible YAML frontmatter with category set to 'preference'",
+        "The preference file body clearly articulates the preference for bullet points over prose paragraphs",
+        "MEMORY.md is updated with a new entry under a User Preferences section referencing this formatting preference, OR if MEMORY.md is already at or above 4 KB, preferences/README.md is updated instead — either outcome is acceptable",
+        "The agent confirms to the user what was saved and where, including whether MEMORY.md was updated"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Session ending. Please write today's daily log covering what we worked on: I reviewed Parag Monteiro's response to our LinkedIn outreach and drafted a follow-up article share message. We also decided to reach out to Mark Willis next, and I corrected your earlier assumption that Parag is a CTO — he's actually VP of Product. Open item: finalize the article share message tomorrow.",
+      "expected_output": "A daily log file created at memory/daily/<YYYY-MM-DD>.md with MAGI-compatible frontmatter. Body covers session focus, key events (decision to reach out to Mark Willis, correction about Parag's role, article share message draft), and open items. An entry appended to memory/daily/README.md. MEMORY.md is NOT updated with a new daily pointer. Parag's people file updated with the role correction (amendment note appended). Confirmation to the user.",
+      "files": [
+        "tests/memories-scb-api-head/MEMORY.md",
+        "tests/memories-scb-api-head/people/parag-monteiro.md",
+        "tests/memories-scb-api-head/daily/2026-04-01.md"
+      ],
+      "expectations": [
+        "A daily log file is created at memory/daily/YYYY-MM-DD.md (using today's date) with MAGI-compatible frontmatter and category: daily-log",
+        "The daily log body covers all three key session events: reviewing Parag's LinkedIn response, the decision to reach out to Mark Willis next, and the role correction for Parag",
+        "The daily log includes the open item about finalising the article share message",
+        "An entry is appended to memory/daily/README.md (or the file is created if absent) — one line summarising the session",
+        "The Parag Monteiro people file is updated with a correction note identifying his role as VP of Product, not CTO",
+        "MEMORY.md is NOT modified with a new individual daily log pointer (the daily log bootstrap pointer must not be duplicated)"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "We just decided to drop Vercel as our deployment platform and move to Fly.io. The edge latency on EU customers was significantly worse than expected — p95 was 380ms versus 95ms on Fly. We also considered Render and Railway but ruled them out: Render has no multi-region support and Railway's pricing doesn't scale for us. Please save this decision.",
+      "expected_output": "A decision file created at memory/decisions/<slug>/README.md with MAGI-compatible YAML frontmatter (category: decision). Body covers the decision (Fly.io), reasoning (EU latency data), both alternatives considered (Render — no multi-region; Railway — pricing), and trade-offs. MEMORY.md is updated with a pointer under Recent Decisions (fixture is under 4 KB so the update should proceed). Confirmation to user.",
+      "files": [
+        "tests/memories-clean/MEMORY.md",
+        "tests/memories-clean/memory/decisions/README.md"
+      ],
+      "expectations": [
+        "A decision file is created at a path under memory/decisions/ with a README.md as the entry point",
+        "The decision file includes MAGI-compatible YAML frontmatter with doc-id (a real UUID, not placeholder text), title, description, category set to 'decision', created, last-updated, and tags",
+        "The decision body covers: the decision (switch to Fly.io), reasoning (EU latency p95 data), both rejected alternatives (Render and Railway) with their reasons, and trade-offs",
+        "MEMORY.md is updated with a pointer to the new decision under the Recent Decisions section — since MEMORY.md is under 4 KB, this update must not be skipped",
+        "The agent confirms to the user what was saved and where, stating that MEMORY.md was updated"
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "Two environment updates to save. First: we just hired a third engineer, Sarah Chen, backend specialist — she starts Monday 2026-04-13. Second: we've officially closed a $2M pre-seed round with Antler, which changes our stage from bootstrapped to funded. Please update our memory with both of these environment facts.",
+      "expected_output": "Both environment facts written directly to MEMORY.md (Environment section) — not to a Tier 2 file. Team entry updated to include Sarah Chen. Stage/funding entry added or updated. No separate Tier 2 files created for these facts. MEMORY.md stays under 4 KB (fixture starts at 1 KB). Confirmation to user noting both facts were recorded.",
+      "files": [
+        "tests/memories-clean/MEMORY.md"
+      ],
+      "expectations": [
+        "MEMORY.md Environment section is updated to include Sarah Chen as a new team member (backend engineer, starting 2026-04-13)",
+        "MEMORY.md Environment section is updated to reflect the funding stage change from bootstrapped to funded ($2M pre-seed, Antler)",
+        "No separate Tier 2 memory file is created for either environment fact — environment facts go directly to MEMORY.md, not to a topical store",
+        "MEMORY.md remains under 4 KB after both updates",
+        "The agent confirms to the user that both environment facts were saved to MEMORY.md with a summary of what changed"
+      ]
+    }
+  ]
+}

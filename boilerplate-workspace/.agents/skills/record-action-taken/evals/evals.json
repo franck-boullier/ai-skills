@@ -1,0 +1,71 @@
+{
+  "skill_name": "record-action-taken",
+  "notes": "Four evals covering the four primary trigger paths: (1) happy-path first resolution via slash-command, (2) ID-not-found with fuzzy description fallback, (3) re-resolution where outcome changes, (4) agent-detected session-end where outcome is missing and skill ASKs BACK. Each eval uses a pre-seeded workspace: MEMORY.md + action record files + INDEX.md as described in the 'setup' field. Workspace root for test-01 is record-action-taken/tests/test-01/workspace/.",
+  "evals": [
+    {
+      "id": 1,
+      "name": "slash-command-happy-path-first-resolution",
+      "prompt": "/record-action-taken A-019e011c-829f-7f3b-ae23-f9a500c77a51 done \"Pushed v0.4 to staging at 14:48 UTC, smoke tests green.\"\n\nMy MEMORY.md is at ./MEMORY.md.\n\nWorkspace root for this test: record-action-taken/tests/test-01/workspace/eval-1/",
+      "setup": "MEMORY.md points to ./memories/actions as the shared-actions-root and has no local-actions-root. ./memories/actions/A-019e011c-829f-7f3b-ae23-f9a500c77a51.md is an open action ('Update the API documentation for the new auth flow', owner=Franck, due=2026-05-15, priority=medium). ./memories/actions/INDEX.md has a single row for that action. The four per-outcome subfolders do NOT exist yet.",
+      "expected_output": "The record is moved to ./memories/actions/done/A-019e011c-...md with status=done, resolved-at populated, resolved-by='user', resolution-note set, resolution-history with one entry. ./memories/actions/INDEX.md has the row removed (table header only). ./memories/actions/done/INDEX.md is created with MAGI-compliant frontmatter and a single row. The skill returns a confirmation object {id, outcome, new-path, resolved-at}.",
+      "files": [],
+      "expectations": [
+        "The skill reads MEMORY.md and extracts shared-actions-root before doing anything else",
+        "The skill does NOT ask back for outcome because 'done' was supplied in the slash-command",
+        "The skill does NOT ask back for a note because a note was supplied",
+        "The skill calls scripts/resolve_action.py with --shared-root, --id, --outcome done, --note, and --resolved-by user",
+        "The action record is moved from the open folder to done/ subfolder",
+        "The open INDEX.md row for this action is removed after resolution",
+        "A done/INDEX.md is created (since it did not exist) and the resolved action row is appended",
+        "The skill reports the new file path and outcome back to the caller"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "id-not-found-fuzzy-description-fallback",
+      "prompt": "Please resolve action A-bad9f00d-cafe-7eef-9999-000000000000 as done. MEMORY.md is at ./MEMORY.md.\n\nWorkspace root for this test: record-action-taken/tests/test-01/workspace/eval-2/",
+      "setup": "MEMORY.md is valid. ./memories/actions/ contains three open records: A-019295b1-0000-7000-a000-000000000001.md (description: 'Update the API docs for the new auth flow', owner=Franck), A-019298c2-0000-7000-a000-000000000002.md (description: 'Update the deployment runbook', owner=db-team), A-01929a31-0000-7000-a000-000000000003.md (description: 'Document the new dashboard rollout', owner=design-team). The id 'A-bad9f00d-...' does NOT exist anywhere. The open INDEX.md has rows for all three real actions.",
+      "expected_output": "The skill ASKs BACK that the id is not found and offers a description-based search. When the user replies with a description like 'Update the API documentation', the skill presents the top three candidates and lets the user pick one. After picking the correct one, the skill resolves it as done normally.",
+      "files": [],
+      "expectations": [
+        "The skill reads MEMORY.md and validates it before attempting the lookup",
+        "The skill reports that no record was found for A-bad9f00d-cafe-7eef-9999-000000000000",
+        "The skill ASKs BACK offering to search by description (rather than silently failing or inventing a record)",
+        "The skill does NOT write any file to disk before a valid record is identified and confirmed",
+        "When given a description to search by, the skill presents matching candidates with their IDs and summaries"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "re-resolution-skipped-to-done-outcome-changed",
+      "prompt": "/record-action-taken A-019e011c-d37a-7fab-a004-91064da644bf done \"Actually needed for prod release after all.\"\n\nMEMORY.md is at ./MEMORY.md.\n\nWorkspace root for this test: record-action-taken/tests/test-01/workspace/eval-3/",
+      "setup": "MEMORY.md is valid. The action A-019e011c-d37a-7fab-a004-91064da644bf already lives at ./memories/actions/skipped/A-019e011c-d37a-7fab-a004-91064da644bf.md with status=skipped and a single resolution-history entry from a prior session. ./memories/actions/skipped/INDEX.md has its row. ./memories/actions/done/ does not yet exist. The open INDEX.md does not have a row for this action.",
+      "expected_output": "Re-resolution flow: file moves from skipped/ to done/. resolution-history grows from 1 entry to 2 entries. Body retains the original '## Resolution' section and gains a '## Resolution Event 2' section. skipped/INDEX.md row is removed. done/INDEX.md is created and the row is appended. open INDEX.md is NOT touched. Confirmation object reports was-re-resolution=true.",
+      "files": [],
+      "expectations": [
+        "The skill reads MEMORY.md and locates the action record in the skipped/ subfolder (not just the open path)",
+        "The skill recognizes this as a re-resolution case (record is already closed, outcome changes from skipped to done)",
+        "The skill calls scripts/resolve_action.py which handles the re-resolution atomically",
+        "The action record moves from skipped/ to done/ subfolder",
+        "The resolution-history in the frontmatter contains at least 2 entries after re-resolution",
+        "The skipped/INDEX.md row is removed after the re-resolution",
+        "done/INDEX.md is created (since it did not exist) with the re-resolved action row"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "agent-detected-session-end-missing-outcome-askback",
+      "prompt": "I am the chat-session-scribe agent, wrapping up a session. I detected that during this session the user said 'we shipped the auth audit logs to staging this morning'. The matching open action is A-019e02a1-7fff-7c1c-8b1a-deadbeef1234 ('Add audit logs to the deployment runbook'). MEMORY.md is at ./scribe/MEMORY.md (which points to a shared root and a local root for chat-session-scribe). Please resolve that action with note 'Confirmed completion in chat at 09:14 UTC.' I have not specified an outcome.\n\nWorkspace root for this test: record-action-taken/tests/test-01/workspace/eval-4/",
+      "setup": "MEMORY.md gives shared-actions-root=./memories/actions and local-actions-root=./scribe/memories/actions. The action exists open at the shared root AND at the scribe local root. Both have INDEX.md rows.",
+      "expected_output": "The skill detects the missing outcome and ASKs BACK 'Was this done, skipped, obsolete, or cancelled?' On 'done', it proceeds: shared file moves to shared done/, local file moves to scribe local done/, both INDEX.md files update consistently. resolved-by='chat-session-scribe' (not 'user'). Atomic across both roots.",
+      "files": [],
+      "expectations": [
+        "The skill reads MEMORY.md and extracts both shared-actions-root and local-actions-root",
+        "The skill ASKs BACK 'Was this done, skipped, obsolete, or cancelled?' because no outcome was provided",
+        "The skill does NOT silently default to any outcome value",
+        "The skill does NOT write any file before an explicit outcome is confirmed",
+        "The skill sets resolved-by to the caller agent identity ('chat-session-scribe'), not 'user'"
+      ]
+    }
+  ]
+}

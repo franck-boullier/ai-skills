@@ -1,0 +1,337 @@
+{
+  "skill_name": "restart-from-previous-session",
+  "schema_version": 1,
+  "notes": "Eight test cases covering both invocation paths, the four lifecycle outcomes, and two end-to-end chain scenarios where session-start and session-end fire inside one continuous agent. Each case is a realistic user prompt. Expected outputs describe the deliverables the agent should produce; assertions are programmatically checkable predicates over those deliverables. Test cases assume the agent has access to the skill at draft-skill/SKILL.md and can read/write inside a sandboxed workspace mirroring memories/restart-guides/.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "session-start-no-active-guides",
+      "prompt": "I'm starting a fresh session. Check if there's a restart guide I should pick up first.",
+      "files": [
+        "fixtures/workspace-no-guides/memories/restart-guides/_index.md"
+      ],
+      "fixture_notes": "Fixture: memories/restart-guides/ exists, _index.md exists with all four tables empty, Quick Status all zero. No files in active/ or other subfolders.",
+      "expected_output": "Agent runs the session-start path, reads _index.md, finds the Active table empty, informs the user 'No active restart guides found — starting fresh.' (or equivalent prose), writes nothing to disk, and proceeds with the session.",
+      "assertions": [
+        {
+          "id": "no-chooser-presented",
+          "text": "Agent does not invoke AskUserQuestion with a chooser of guides (since none exist).",
+          "check": "transcript: no AskUserQuestion call listing guide titles as options"
+        },
+        {
+          "id": "no-files-written",
+          "text": "No files are created or modified anywhere under memories/restart-guides/.",
+          "check": "filesystem: state of memories/restart-guides/ matches fixture byte-for-byte"
+        },
+        {
+          "id": "informs-user-empty",
+          "text": "Agent tells the user explicitly that no active restart guides were found.",
+          "check": "transcript: model output contains a phrase like 'no active restart guides' or 'nothing to resume' or 'starting fresh'"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "session-start-one-active-guide",
+      "prompt": "Continue where we left off — pick up the previous session's work.",
+      "files": [
+        "fixtures/workspace-one-guide/memories/restart-guides/_index.md",
+        "fixtures/workspace-one-guide/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+      ],
+      "fixture_notes": "Fixture: a copy of the knowledge-base active guide. _index.md has exactly one Active row pointing to that file.",
+      "expected_output": "Agent runs the session-start path, reads _index.md, finds one Active row, presents a chooser via AskUserQuestion with options 'Resume: <topic>' and 'Start fresh', and (assuming the user picks Resume in the eval harness) reads the guide end-to-end and reports the TL;DR back as proof of having read it. Records the filename for any session-end follow-up.",
+      "assertions": [
+        {
+          "id": "chooser-presented",
+          "text": "Agent invokes AskUserQuestion with at least two options: one to resume the discovered guide, one to start fresh.",
+          "check": "transcript: AskUserQuestion call with options including the guide topic and 'Start fresh' or similar"
+        },
+        {
+          "id": "reads-guide-fully",
+          "text": "Agent reads the full guide file after the user's selection, not just _index.md.",
+          "check": "transcript: Read tool call on the active-guide path"
+        },
+        {
+          "id": "summarises-tldr",
+          "text": "Agent's final response summarises the TL;DR — at least 3 of the 5 TL;DR bullets are referenced.",
+          "check": "transcript: model output mentions at least 3 of: 'A.14', 'A.15', 'A.16', 'B.9', 'B.10', 'playbook rewrite', 'one decision per session'"
+        },
+        {
+          "id": "no-files-written",
+          "text": "No files are created or modified during session start.",
+          "check": "filesystem: state of memories/restart-guides/ matches fixture byte-for-byte"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "session-end-create-new-guide",
+      "prompt": "We just paused work on rewriting the implementation playbook — five new pending decisions opened today, and we won't finish in this session. Prepare a restart guide so the next session can resume cleanly. The task slug should be 'playbook-rewrite'.",
+      "files": [
+        "fixtures/workspace-no-guides/memories/restart-guides/_index.md"
+      ],
+      "fixture_notes": "Fixture: empty restart-guides folder with empty _index.md. Conversation transcript (provided to the eval harness) lists the files modified and decisions opened this session, mirroring the KB active guide's content.",
+      "expected_output": "Agent runs the session-end path. Asks the user to confirm the captured context, then writes a new file at memories/restart-guides/active/<today's date>-playbook-rewrite.md with all 11 mandatory body sections (12th, Critical sequencing, is conditional — include if dependencies present). Front matter contains status: active, doc-id as a UUID v7, plus MAGI base fields delegated to the sub-skill. _index.md Active table has a new row pointing to the new file; Quick Status counts now show Active: 1.",
+      "assertions": [
+        {
+          "id": "file-created-correct-path",
+          "text": "A file is created at memories/restart-guides/active/<YYYY-MM-DD>-playbook-rewrite.md where the date is today's date.",
+          "check": "filesystem: file exists matching glob 'memories/restart-guides/active/????-??-??-playbook-rewrite.md'"
+        },
+        {
+          "id": "all-mandatory-sections-present",
+          "text": "The new guide contains all 11 mandatory section headings: opening callout, TL;DR, What this task is, What landed this session, What is NOT done, How to start the next session, Session log, Things NOT to redo, Things to be careful about, Open questions, Pointers.",
+          "check": "regex over file body: each of the 11 section header strings appears at least once"
+        },
+        {
+          "id": "frontmatter-status-active",
+          "text": "Front matter contains 'status: active' and no closure fields.",
+          "check": "regex on front matter: status: active is present; no closed-on/closed-reason/superseded-by/superseded-on/superseded-reason"
+        },
+        {
+          "id": "frontmatter-doc-id-uuid-v7",
+          "text": "doc-id is a UUID v7 (version nibble = 7, variant high bits = 10).",
+          "check": "regex over front matter for doc-id, then check char 14 == '7' and char 19 in {'8','9','a','b'}"
+        },
+        {
+          "id": "index-row-added",
+          "text": "_index.md Active table has a row pointing to the new file with today's date.",
+          "check": "regex over _index.md: a row line under '## Active' that contains the new filename"
+        },
+        {
+          "id": "quick-status-active-1",
+          "text": "Quick Status block shows Active: 1 and Total: 1.",
+          "check": "regex over _index.md: '- **Active:** 1' and '- **Total:** 1'"
+        },
+        {
+          "id": "session-log-has-one-entry",
+          "text": "Session log section contains exactly one bullet line.",
+          "check": "regex over file body: one line matching '- **<date> (this session)** —' under '## Session log'"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "session-end-update-existing-guide",
+      "prompt": "I just closed decision A.14 (Option A — use the custom Notion MCP server). Update the active restart guide to reflect that this session happened.",
+      "files": [
+        "fixtures/workspace-one-guide/memories/restart-guides/_index.md",
+        "fixtures/workspace-one-guide/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+      ],
+      "fixture_notes": "Fixture: the active guide is loaded (active_restart_guide variable set). Conversation context provides the decision-closure details. No status transition — A.14 is one of five decisions; four still open.",
+      "expected_output": "Agent runs the session-end path on the update branch. Appends a dated subsection under 'What landed this session' describing the A.14 closure. Prepends one bullet to 'Session log' (most-recent first). Updates front-matter 'last-updated' to today's date. No status change; status remains 'active'. _index.md row's last-updated cell is refreshed; Quick Status counts unchanged.",
+      "assertions": [
+        {
+          "id": "no-new-files",
+          "text": "No new files are created — only the existing active guide is modified.",
+          "check": "filesystem: file count under memories/restart-guides/active/ unchanged"
+        },
+        {
+          "id": "what-landed-appended",
+          "text": "'What landed this session' section has a new dated subsection mentioning A.14.",
+          "check": "regex over file body: a subsection (### with today's date) under '## What landed this session' containing 'A.14'"
+        },
+        {
+          "id": "session-log-prepended",
+          "text": "'Session log' has a new entry at the TOP (most-recent first), not the bottom.",
+          "check": "regex over file body: the first bullet under '## Session log' is for today's date"
+        },
+        {
+          "id": "frontmatter-last-updated",
+          "text": "Front matter 'last-updated:' is today's date.",
+          "check": "regex over front matter: 'last-updated:' line value equals today (YYYY-MM-DD)"
+        },
+        {
+          "id": "status-still-active",
+          "text": "Status remains 'active'; no closure fields added.",
+          "check": "regex over front matter: 'status: active' present; no closure fields"
+        },
+        {
+          "id": "index-row-refreshed",
+          "text": "_index.md Active row for this guide shows today's date in its last-updated cell.",
+          "check": "regex over _index.md: row matching the guide path has today's date as the third cell"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "session-end-lifecycle-move-to-completed",
+      "prompt": "We just closed the last remaining decision and finished the playbook rewrite. Wrap up the restart guide — every action item is closed.",
+      "files": [
+        "fixtures/workspace-one-guide-near-done/memories/restart-guides/_index.md",
+        "fixtures/workspace-one-guide-near-done/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+      ],
+      "fixture_notes": "Same fixture as #3, but conversation context indicates all five decisions are closed and the playbook is rewritten. This triggers a status transition to 'completed'.",
+      "expected_output": "Agent updates the guide body (append to 'What landed this session', prepend to 'Session log'), flips status to 'completed', fills closed-on=today and closed-reason. Then invokes lifecycle_move.py to: move the file from active/ to completed/, migrate the _index.md row from Active to Completed, refresh Quick Status counts (Active: 0, Completed: 1).",
+      "assertions": [
+        {
+          "id": "file-in-completed",
+          "text": "The guide file now lives under memories/restart-guides/completed/, not active/.",
+          "check": "filesystem: file exists at completed/<original-filename> AND no file at active/<original-filename>"
+        },
+        {
+          "id": "frontmatter-status-completed",
+          "text": "Front matter shows 'status: completed' with required closure fields.",
+          "check": "regex over front matter: 'status: completed', 'closed-on:' non-empty, 'closed-reason:' non-empty"
+        },
+        {
+          "id": "index-row-moved",
+          "text": "_index.md row has moved from the Active table to the Completed table.",
+          "check": "regex over _index.md: filename appears under '## Completed' AND does not appear under '## Active'"
+        },
+        {
+          "id": "quick-status-updated",
+          "text": "Quick Status block shows Active: 0 and Completed: 1.",
+          "check": "regex over _index.md: '- **Active:** 0' and '- **Completed:** 1'"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "session-end-refuse-single-session-task",
+      "prompt": "I just renamed two variables in a single file. Write me a restart guide for this session.",
+      "files": [],
+      "fixture_notes": "No fixture needed beyond an empty workspace. The eval tests whether the agent refuses to create a guide for a clearly single-session task.",
+      "expected_output": "Agent refuses to create a restart guide. Explains that restart guides are for multi-session work and offers an alternative (a one-line note, a commit message, a decision record if relevant). No files written.",
+      "assertions": [
+        {
+          "id": "no-files-written",
+          "text": "Nothing is created under memories/restart-guides/.",
+          "check": "filesystem: state of memories/restart-guides/ matches fixture (empty or non-existent)"
+        },
+        {
+          "id": "refusal-mentions-single-session",
+          "text": "Agent's response explicitly notes that this is single-session work or that a restart guide isn't the right tool here.",
+          "check": "transcript: model output contains a phrase like 'single-session', 'one-shot', 'not the right tool', or 'a guide would be noise'"
+        },
+        {
+          "id": "offers-alternative",
+          "text": "Agent offers an alternative artefact (commit message, decision record, action plan, or a one-line note).",
+          "check": "transcript: model output mentions at least one of: 'commit', 'decision record', 'action plan', 'note'"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "session-chain-start-then-end-update",
+      "prompt": "Continue where we left off — pick up the previous session's work. Then update the guide before we pause: in this session we closed decision A.14 (Option A — use the custom Notion MCP server). Four decisions remain open (A.15, A.16, B.9, B.10). We're pausing again now.",
+      "files": [
+        "fixtures/workspace-one-guide/memories/restart-guides/_index.md",
+        "fixtures/workspace-one-guide/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+      ],
+      "fixture_notes": "Fixture: workspace-one-guide — one Active row, the KB active guide present. The prompt deliberately bundles BOTH invocation paths so the agent must run session-start first (load the guide, record active_restart_guide) and then session-end UPDATE (using the recorded variable, not creating a duplicate). This eval is the end-to-end chain test that the skill's two-path architecture depends on but that no single-path eval exercises.",
+      "expected_output": "Agent runs session-start path FIRST: reads _index.md, presents a chooser via AskUserQuestion (resume vs start fresh), reads the chosen guide end-to-end, records the filename as active_restart_guide. Then runs session-end path: detects that active_restart_guide is set and the session's work matches the same task → takes the UPDATE branch (NOT create-new). Appends a dated subsection under 'What landed this session' describing the A.14 closure. Prepends one bullet to 'Session log' (most-recent first). Updates front-matter 'last-updated' to today. Status remains 'active'. _index.md row's last-updated cell is refreshed; Quick Status counts unchanged. The total file count under active/ is unchanged — exactly one guide, not two. The chain assertion is the critical one: a broken active_restart_guide handoff produces a duplicate guide and is the failure mode this eval exists to catch.",
+      "assertions": [
+        {
+          "id": "chooser-presented-at-start",
+          "text": "Agent invokes AskUserQuestion early in the turn with at least two options (resume the discovered guide, start fresh) — the session-start path ran.",
+          "check": "transcript: AskUserQuestion call appears BEFORE any file write, with options including the guide topic and 'Start fresh' or similar"
+        },
+        {
+          "id": "guide-read-fully-at-start",
+          "text": "Agent reads the full active guide file after the chooser, not just _index.md.",
+          "check": "transcript: Read tool call on the active-guide path appears BEFORE any file write"
+        },
+        {
+          "id": "session-end-takes-update-branch",
+          "text": "Session-end takes the UPDATE branch: the existing guide is modified rather than a new file created. Verifies active_restart_guide was honoured across the path boundary.",
+          "check": "filesystem: file count under memories/restart-guides/active/ remains exactly 1 AND the existing filename (2026-05-12-knowledge-base-sync-decisions-and-playbook.md) was modified (mtime newer than fixture or content diff non-empty)"
+        },
+        {
+          "id": "no-duplicate-guide-created",
+          "text": "No second guide file appears in active/ for this same task. The failure mode this eval exists to catch is: agent forgets active_restart_guide between paths and creates a new file alongside the existing one.",
+          "check": "filesystem: glob 'memories/restart-guides/active/*.md' returns exactly one path"
+        },
+        {
+          "id": "what-landed-appended",
+          "text": "'What landed this session' section has a new dated subsection mentioning A.14.",
+          "check": "regex over file body: a subsection (### with today's date) under '## What landed this session' containing 'A.14'"
+        },
+        {
+          "id": "session-log-prepended",
+          "text": "'Session log' has a new entry at the TOP (most-recent first), not the bottom.",
+          "check": "regex over file body: the first bullet under '## Session log' is for today's date"
+        },
+        {
+          "id": "frontmatter-last-updated",
+          "text": "Front matter 'last-updated:' is today's date.",
+          "check": "regex over front matter: 'last-updated:' line value equals today (YYYY-MM-DD)"
+        },
+        {
+          "id": "status-still-active",
+          "text": "Status remains 'active'; no closure fields added.",
+          "check": "regex over front matter: 'status: active' present; no closure fields"
+        },
+        {
+          "id": "index-row-refreshed",
+          "text": "_index.md Active row for this guide shows today's date in its last-updated cell; Quick Status counts unchanged (Active: 1, Total: 1).",
+          "check": "regex over _index.md: row matching the guide path has today's date as the third cell AND '- **Active:** 1' AND '- **Total:** 1'"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "name": "session-chain-start-then-create-and-supersede",
+      "prompt": "Continue where we left off — pick up whatever active guide is loaded. Actually, here's an update: today we pivoted hard. The playbook rewrite is paused indefinitely; instead we're kicking off a new multi-session project — migrating the team's decision records to a new structured format. Use slug 'decision-record-migration'. Please mark the old guide superseded by the new one and prepare a fresh restart guide for the new task before we pause.",
+      "files": [
+        "fixtures/workspace-one-guide/memories/restart-guides/_index.md",
+        "fixtures/workspace-one-guide/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+      ],
+      "fixture_notes": "Fixture: workspace-one-guide — same as Eval 6, but the user's composite prompt drives a different session-end branch (Step 5d in session-end-writer.md): create new guide AND mark old one superseded. This is the most complex documented session-end branch and the only one not covered by Evals 0-5. The eval exists for two reasons: (1) it's the second 'both paths in one turn' scenario explicitly listed in the SKILL.md edge-case table, and (2) it's the only eval that exercises lifecycle_move.py for a status change to 'superseded' (Eval 4 covers 'completed').",
+      "expected_output": "Agent runs session-start path first (chooser → load → record active_restart_guide). Then runs session-end path on the create-plus-supersede branch (Step 5d): writes a NEW guide at memories/restart-guides/active/<today>-decision-record-migration.md with status: active and a 'supersedes:' forward pointer to the old guide. Sets the old guide's status to 'superseded', adds superseded-by/superseded-on/superseded-reason closure fields, then invokes lifecycle_move.py to physically move the old guide from active/ to superseded/ and migrate its index row. Final state: one Active row (the new guide), one Superseded row (the old guide), Quick Status Active: 1, Superseded: 1, Total: 2.",
+      "assertions": [
+        {
+          "id": "chooser-presented-at-start",
+          "text": "Agent invokes AskUserQuestion early in the turn with the resume/start-fresh chooser — session-start path ran.",
+          "check": "transcript: AskUserQuestion call appears BEFORE any file write, with options including the guide topic and 'Start fresh' or similar"
+        },
+        {
+          "id": "new-guide-created-in-active",
+          "text": "A new guide is created at memories/restart-guides/active/<today>-decision-record-migration.md with all 11 mandatory body sections and status: active.",
+          "check": "filesystem: file exists matching glob 'memories/restart-guides/active/????-??-??-decision-record-migration.md' AND its front matter contains 'status: active'"
+        },
+        {
+          "id": "old-guide-moved-to-superseded",
+          "text": "Old guide file (2026-05-12-knowledge-base-sync-decisions-and-playbook.md) lives under memories/restart-guides/superseded/ and is no longer in active/.",
+          "check": "filesystem: file exists at superseded/2026-05-12-knowledge-base-sync-decisions-and-playbook.md AND no file at active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md"
+        },
+        {
+          "id": "old-guide-frontmatter-superseded",
+          "text": "Old guide front matter has status: superseded, plus all three required closure fields populated and non-empty.",
+          "check": "regex over old guide front matter: 'status: superseded' AND 'superseded-by:' non-empty AND 'superseded-on:' non-empty AND 'superseded-reason:' non-empty"
+        },
+        {
+          "id": "new-guide-supersedes-pointer",
+          "text": "New guide front matter contains a 'supersedes:' forward pointer to the old guide's superseded/ path (Step 5d, optional but useful).",
+          "check": "regex over new guide front matter: 'supersedes:' line referencing 'superseded/2026-05-12-knowledge-base-sync-decisions-and-playbook.md'"
+        },
+        {
+          "id": "supersession-pointers-reciprocal",
+          "text": "The new guide's 'supersedes:' value and the old guide's 'superseded-by:' value point at each other (mutual consistency).",
+          "check": "front-matter cross-check: new.supersedes endswith old filename AND old.superseded-by endswith new filename"
+        },
+        {
+          "id": "index-rows-correct",
+          "text": "_index.md Active table has exactly one row (the new guide), Superseded table has exactly one row (the old guide), Quick Status shows Active: 1, Superseded: 1, Total: 2.",
+          "check": "regex over _index.md: Active table contains the new filename and not the old; Superseded table contains the old filename and not the new; '- **Active:** 1' AND '- **Superseded:** 1' AND '- **Total:** 2'"
+        }
+      ]
+    }
+  ],
+  "expected_results_summary": {
+    "session-start-no-active-guides": "Agent detects empty index, informs user, writes nothing, proceeds.",
+    "session-start-one-active-guide": "Agent reads index, presents chooser, reads chosen guide end-to-end, surfaces TL;DR.",
+    "session-end-create-new-guide": "Agent writes a complete 11-section guide with status: active, UUID v7 doc-id, and adds row to index Active table.",
+    "session-end-update-existing-guide": "Agent appends to landed section + prepends to session log + updates last-updated. No status change.",
+    "session-end-lifecycle-move-to-completed": "Agent updates body, flips status, fills closure fields, calls lifecycle_move.py to relocate file and migrate index row.",
+    "session-end-refuse-single-session-task": "Agent refuses, explains rationale, offers alternative artefact.",
+    "session-chain-start-then-end-update": "Single agent runs session-start (chooser + guide load) then session-end UPDATE in one continuous turn. active_restart_guide persists across the path boundary; existing guide is updated, no duplicate created.",
+    "session-chain-start-then-create-and-supersede": "Single agent runs session-start (chooser + guide load) then session-end create-plus-supersede branch (Step 5d): new guide created in active/, old guide moved to superseded/ with closure fields, mutual supersession pointers in place, index reflects both."
+  },
+  "fixtures_to_build": [
+    "fixtures/workspace-no-guides/memories/restart-guides/_index.md — empty index with all four tables, Quick Status all zero.",
+    "fixtures/workspace-one-guide/memories/restart-guides/_index.md — index with one Active row pointing to the KB active guide.",
+    "fixtures/workspace-one-guide/memories/restart-guides/active/2026-05-12-knowledge-base-sync-decisions-and-playbook.md — copy of the KB active guide.",
+    "fixtures/workspace-one-guide-near-done/... — same as workspace-one-guide but with conversation context (passed to the eval harness) indicating all decisions are closed."
+  ]
+}

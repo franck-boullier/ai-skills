@@ -1,0 +1,47 @@
+{
+  "skill_name": "record-action-needed",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "/record-action Update the API documentation for the new auth flow",
+      "expected_output": "The skill must NOT proceed to write any file or generate any ID. It should stop immediately at Step 1 and ask the user for the path to their MEMORY.md file, using the exact phrasing: \"To run this skill I need a `MEMORY.md` file that specifies where action records will be stored. Please provide the path to your `MEMORY.md`.\" No description is processed, no owner or due-date questions are asked, and no output is produced until the MEMORY.md path is supplied.",
+      "files": [],
+      "expectations": [
+        "The skill stops at Step 1 without writing any file to disk",
+        "The skill asks for the MEMORY.md path using the exact phrase: 'To run this skill I need a MEMORY.md file that specifies where action records will be stored. Please provide the path to your MEMORY.md.'",
+        "The skill does not generate or display a UUIDv7 ID",
+        "The skill does not ask for owner or due-date before MEMORY.md is provided"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "record this action: Review the database migration plan with the infrastructure team before the Q3 deadline.\n\nMy MEMORY.md is at /workspace/MEMORY.md and contains:\n```\nactions_shared: /workspace/memories/actions\nactions_local: null\n```",
+      "expected_output": "The skill reads MEMORY.md, extracts the shared actions path (/workspace/memories/actions) and notes no local agent folder. It receives the description. It then performs ASK-BACK: first asks \"Who owns this action?\", waits for a reply, then asks \"When is this due?\", waits for a reply. Only after both answers are collected does it proceed to auto-derive fields (UUIDv7 id, created-at, priority=medium), perform the privacy check (no sensitive content — passes), render the markdown record, write it to /workspace/memories/actions/A-<uuid>.md, skip the local-copy step (no local folder), update /workspace/memories/actions/INDEX.md, and return the action id to the caller.",
+      "files": [],
+      "expectations": [
+        "The skill reads MEMORY.md and extracts the shared actions path before proceeding",
+        "The skill asks 'Who owns this action?' before writing any file",
+        "The skill asks 'When is this due?' before writing any file",
+        "After ASK-BACK answers are provided, the skill generates a UUIDv7 ID (format: A-<uuid>)",
+        "The action record frontmatter contains all required fields: id, status, owner, due-date, priority, source, created-at",
+        "The skill skips the local-copy step because actions_local is null",
+        "The skill writes the action record to the shared actions folder and updates INDEX.md"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "record-action-needed.invoke(\n  memory_md=\"/workspace/MEMORY.md\",\n  description=\"Schedule a follow-up review of the migration plan with the database team\",\n  owner=\"db-team\",\n  due_date=\"2026-05-20\"\n)\n\nContext: you are the chat-session-scribe agent wrapping up a session. MEMORY.md at /workspace/MEMORY.md contains:\n```\nactions_shared: /workspace/memories/actions\nactions_local: draft-agents/chat-session-scribe/memories/actions\n```",
+      "expected_output": "The skill runs all 11 steps in order without pausing for ASK-BACK (owner and due-date are already provided). It reads MEMORY.md and extracts both paths. It validates the description (non-empty — pass). It auto-derives id (UUIDv7), created-at (UTC now), priority (medium, since not specified), source (session metadata or \"unknown-session\"). It performs the privacy check (passes). It renders the markdown record with the exact frontmatter schema. It writes to /workspace/memories/actions/A-<uuid>.md (shared). It writes a local copy to draft-agents/chat-session-scribe/memories/actions/A-<uuid>.md (caller is an FBO-framework agent). It updates INDEX.md in both locations. It returns the action id (A-<UUIDv7>) to the caller. If either INDEX.md does not exist, it creates it with MAGI-compliant frontmatter via format-md-for-progressive-disclosure before appending the row.",
+      "files": [],
+      "expectations": [
+        "The skill runs all steps without pausing for ASK-BACK because owner and due-date are pre-provided",
+        "The skill generates a UUIDv7 ID for the action record",
+        "The action record frontmatter contains exactly the required fields: id, status, owner, due-date, priority, source, created-at",
+        "The skill writes the action record to the shared workspace actions folder",
+        "The skill writes a local copy to the caller-agent's actions folder (dual-write)",
+        "The skill updates INDEX.md in both shared and local locations",
+        "The skill returns the UUIDv7 action ID to the caller"
+      ]
+    }
+  ]
+}

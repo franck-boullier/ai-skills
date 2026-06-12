@@ -1,0 +1,194 @@
+{
+  "skill_name": "build-agent-memory",
+  "schema_version": 1,
+  "skill_version": "1.2-draft",
+  "notes": "Six evaluation cases covering the three Step-0 modes (workspace / agent / workspace-confirm-and-update). Cases 1 and 6 test agent and workspace greenfield modes (baseline coverage that v1.2 must not regress). Cases 2-5 cover the new workspace-confirm-and-update mode's triggering surface and the four key branches: conditional gate (offered vs hidden), matching fixture (silent pass), missing-section (additive merge), and conflict-staged (stop-and-ask). Fixtures reuse the regression fixture under ../tests/fixtures/boilerplate-derived/ where possible to avoid duplication. Each case is a realistic user prompt; assertions are programmatically checkable predicates over the agent's transcript and the filesystem post-state.",
+  "evals": [
+    {
+      "id": 0,
+      "name": "greenfield-workspace-mode-baseline",
+      "prompt": "I want to set up workspace memory for this repository — there's nothing here yet.",
+      "files": [],
+      "fixture_notes": "Empty workspace root. No MEMORY.md, no memories/ folder, no decisions.config.md. The Step 0a gate must fail for the third mode (both MEMORY.md AND non-empty memories/ are absent).",
+      "expected_output": "Agent invokes the build-agent-memory skill in workspace mode. Step 0a detects no prior state and hides the third option. Step 0b presents the two-option menu. Agent runs Steps 1-10 in workspace mode and produces MEMORY.md + memories/ tree + connectivity-check entry + setup report.",
+      "assertions": [
+        {
+          "id": "third-mode-hidden",
+          "text": "Agent does NOT offer the workspace-confirm-and-update option at Step 0.",
+          "check": "transcript: AskUserQuestion (or equivalent) presents only two options at the mode-selection step; the words 'confirm-and-update' or 'already present' do not appear in the offered choices"
+        },
+        {
+          "id": "memory-md-created",
+          "text": "MEMORY.md is created at the workspace root with MAGI frontmatter and the 9 canonical H2 sections.",
+          "check": "filesystem: workspace-root/MEMORY.md exists; parseable YAML frontmatter; all 9 H2 sections present"
+        },
+        {
+          "id": "setup-report-created",
+          "text": "memory-setup-report-YYYY-MM-DD-HH-MM.md exists with the Report B (workspace mode) shape.",
+          "check": "filesystem: a memory-setup-report-*.md file matches Report B template (no Validator Findings / Additive Merge Log / Conflict Log sections)"
+        }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "inherited-boilerplate-third-mode-offered",
+      "prompt": "I just cloned the boilerplate and want to configure the workspace memory.",
+      "files": [
+        "tests/fixtures/boilerplate-derived/MEMORY.md",
+        "tests/fixtures/boilerplate-derived/decisions.config.md",
+        "tests/fixtures/boilerplate-derived/memories/decisions/README.md",
+        "tests/fixtures/boilerplate-derived/memories/decision-records/README.md",
+        "tests/fixtures/boilerplate-derived/memories/lessons/README.md",
+        "tests/fixtures/boilerplate-derived/memories/preferences/README.md",
+        "tests/fixtures/boilerplate-derived/memories/restart-guides/README.md",
+        "tests/fixtures/boilerplate-derived/memories/daily/README.md",
+        "tests/fixtures/boilerplate-derived/memories/test/README.md",
+        "tests/fixtures/boilerplate-derived/memories/actions/README.md"
+      ],
+      "fixture_notes": "The canonical boilerplate-derived fixture. MEMORY.md + decisions.config.md + 8 per-store READMEs (including actions/ because shared_actions_root is declared).",
+      "expected_output": "Agent invokes build-agent-memory. Step 0a detects MEMORY.md AND non-empty memories/ and offers the third option. The user picks the third option. Step 1's validator runs and passes silently (no MISSING, no MISMATCHED). Steps 2-7 are no-ops (silent pass). Step 9 writes the connectivity-check entry. Step 10 writes Report C (workspace-confirm-and-update variant) with empty Additive Merge Log and empty Conflict Log.",
+      "assertions": [
+        {
+          "id": "third-mode-offered",
+          "text": "Agent offers the workspace-confirm-and-update option at Step 0.",
+          "check": "transcript: the mode menu includes a third option whose label or description mentions 'already present' or 'confirm-and-update' or 'inherited from a boilerplate'"
+        },
+        {
+          "id": "no-writes-pre-existing",
+          "text": "No pre-existing fixture file is modified (MEMORY.md, decisions.config.md, the 8 per-store READMEs).",
+          "check": "filesystem: state of MEMORY.md, decisions.config.md, and all per-store READMEs matches the fixture byte-for-byte"
+        },
+        {
+          "id": "connectivity-check-written",
+          "text": "memories/test/connectivity-check-YYYY-MM-DD.md is created.",
+          "check": "filesystem: memories/test/connectivity-check-*.md exists with today's date"
+        },
+        {
+          "id": "report-c-shape",
+          "text": "Setup report is Report C variant with Validator Findings / Additive Merge Log (empty) / Conflict Log (empty) sections.",
+          "check": "filesystem: memory-setup-report-*.md contains H2 sections 'Validator Findings', 'Additive Merge Log', 'Conflict Log'; the merge-log and conflict-log sections are empty or marked empty"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "third-mode-gate-partial-state-hides-option",
+      "prompt": "Configure the memory for this workspace.",
+      "files": [
+        "tests/fixtures/boilerplate-derived/MEMORY.md"
+      ],
+      "fixture_notes": "MEMORY.md is present at the workspace root, but memories/ is absent entirely. Step 0a's gate requires BOTH; this case must fall through to greenfield workspace mode.",
+      "expected_output": "Agent detects MEMORY.md but no memories/ folder. Step 0a's gate fails. Third option is NOT offered. Agent presents the two-option menu and additionally asks the user whether to keep MEMORY.md or remove it (per the Edge Cases row).",
+      "assertions": [
+        {
+          "id": "third-mode-hidden",
+          "text": "Agent does NOT offer the workspace-confirm-and-update option even though MEMORY.md exists.",
+          "check": "transcript: the third option is absent from the mode menu"
+        },
+        {
+          "id": "asks-about-existing-memory-md",
+          "text": "Agent surfaces the partial state and asks the user how to proceed.",
+          "check": "transcript: the agent's response mentions the pre-existing MEMORY.md and asks the user to confirm whether to keep it or remove it"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "workspace-confirm-and-update-additive-merge",
+      "prompt": "Finalise the inherited memory architecture for this repo.",
+      "files": [
+        "tests/fixtures/boilerplate-derived/MEMORY.md",
+        "tests/fixtures/boilerplate-derived/decisions.config.md",
+        "tests/fixtures/boilerplate-derived/memories/decisions/README.md",
+        "tests/fixtures/boilerplate-derived/memories/decision-records/README.md",
+        "tests/fixtures/boilerplate-derived/memories/lessons/README.md",
+        "tests/fixtures/boilerplate-derived/memories/preferences/README.md",
+        "tests/fixtures/boilerplate-derived/memories/daily/README.md",
+        "tests/fixtures/boilerplate-derived/memories/test/README.md",
+        "tests/fixtures/boilerplate-derived/memories/actions/README.md"
+      ],
+      "fixture_notes": "Canonical fixture WITHOUT memories/restart-guides/README.md AND WITHOUT the `## Restart guides` H2 in MEMORY.md — two related missing artefacts the validator should detect and merge.",
+      "expected_output": "Agent runs the validator. V.3 flags memories/restart-guides/ as MISSING; V.1 flags `## Restart guides` as MISSING. Both go into the additive-merge log. Steps 6 and 7 write them from templates. No conflict is surfaced (additive-only).",
+      "assertions": [
+        {
+          "id": "writes-only-missing-section",
+          "text": "MEMORY.md gains the `## Restart guides` section and nothing else changes in MEMORY.md.",
+          "check": "filesystem: MEMORY.md now contains `## Restart guides`; all other H2 sections and their bodies are identical to the fixture"
+        },
+        {
+          "id": "creates-restart-guides-dir",
+          "text": "memories/restart-guides/ + README.md is created from the per-store template.",
+          "check": "filesystem: memories/restart-guides/README.md exists and has MAGI frontmatter"
+        },
+        {
+          "id": "no-other-files-modified",
+          "text": "No other pre-existing fixture file is modified.",
+          "check": "filesystem: state of decisions.config.md and all other per-store READMEs matches the fixture byte-for-byte"
+        },
+        {
+          "id": "report-records-additive-merge",
+          "text": "Setup report records the two-entry additive-merge log.",
+          "check": "filesystem: memory-setup-report-*.md Additive Merge Log section lists 'section ## Restart guides' and 'subdir restart-guides/' entries"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "name": "workspace-confirm-and-update-conflict-stop-and-ask",
+      "prompt": "Validate the inherited memory and make any updates needed.",
+      "files": [
+        "tests/fixtures/boilerplate-derived/MEMORY.md",
+        "tests/fixtures/boilerplate-derived/decisions.config.md",
+        "tests/fixtures/boilerplate-derived/memories/decisions/README.md",
+        "tests/fixtures/boilerplate-derived/memories/decision-records/README.md",
+        "tests/fixtures/boilerplate-derived/memories/lessons/README.md",
+        "tests/fixtures/boilerplate-derived/memories/preferences/README.md",
+        "tests/fixtures/boilerplate-derived/memories/restart-guides/README.md",
+        "tests/fixtures/boilerplate-derived/memories/daily/README.md",
+        "tests/fixtures/boilerplate-derived/memories/test/README.md",
+        "tests/fixtures/boilerplate-derived/memories/actions/README.md"
+      ],
+      "fixture_notes": "Canonical fixture with MEMORY.md modified so root_prefix declares `store/` instead of the boilerplate-expected `memories/`. The validator must surface this as a conflict and stop.",
+      "expected_output": "Agent runs the validator. V.6 detects the root_prefix mismatch. Conflict-Surfacing Semantics kick in: agent stops, prints EXISTING vs SKILL-SHIPPED side-by-side, asks the user 'keep / replace / exit'. Default (no answer) is 'keep'.",
+      "assertions": [
+        {
+          "id": "surfaces-conflict-side-by-side",
+          "text": "Agent presents the root_prefix conflict with EXISTING and SKILL-SHIPPED labels.",
+          "check": "transcript: model output contains both 'EXISTING' and 'SKILL-SHIPPED' (or equivalent labels) and the values 'store/' and 'memories/'"
+        },
+        {
+          "id": "offers-three-resolutions",
+          "text": "Agent offers exactly three resolutions: keep / replace / exit.",
+          "check": "transcript: AskUserQuestion (or equivalent) presents three options whose labels match 'keep', 'replace', and 'exit' (or close paraphrases)"
+        },
+        {
+          "id": "no-writes-before-resolution",
+          "text": "No file is written or modified before the user resolves the conflict.",
+          "check": "filesystem: at the moment of the AskUserQuestion call, no new files have been created and no fixture file has been modified"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "name": "agent-mode-prereq-check",
+      "prompt": "Set up memory for my data-science agent.",
+      "files": [
+        "fixtures/agent-no-soul/IDENTITY.md"
+      ],
+      "fixture_notes": "An agent directory with IDENTITY.md present but SOUL.md and RULES.md absent. Agent mode requires all three identity files before proceeding.",
+      "expected_output": "Agent invokes the skill in agent mode. Step 1 attempts to read SOUL.md and RULES.md, finds them absent, and stops with the documented error message. No MEMORY.md is created.",
+      "assertions": [
+        {
+          "id": "stops-on-missing-soul",
+          "text": "Agent stops at Step 1 and tells the user to create SOUL.md (and RULES.md) first.",
+          "check": "transcript: model output mentions SOUL.md and RULES.md as missing prerequisites; the phrase 'MEMORY.md must be created after' or equivalent appears"
+        },
+        {
+          "id": "no-memory-md-created",
+          "text": "No MEMORY.md is created in the agent directory.",
+          "check": "filesystem: the agent directory does not gain a MEMORY.md or memories/ tree"
+        }
+      ]
+    }
+  ]
+}
